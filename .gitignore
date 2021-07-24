@@ -1,0 +1,5 @@
+*.dmp
+*.tmp
+*.prg
+*.dbg
+bak/
