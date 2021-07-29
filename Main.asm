@@ -4,26 +4,37 @@
 
 ; Check for key press
 defm            check_key
-                lda $00cb  ; Current key pressed
+                lda $cb  ; Current key pressed
                 cmp #/1
                 bne @not_pressed
                 lda #1
                 jmp @check_key_done
 @not_pressed    lda #0
-@check_key_done sta /2
+@check_key_done nop
 endm
 
-; Check a 16 bit number for equality to another 16 bit number
+; Compare a 16 bit number for equality to another 16 bit number
 defm            compare_numbers
-                lda /1
-                cmp #/2
-                bne @not_equal
-                lda /1 + 1
-                cmp #/3
-                bne @not_equal
-                lda #1
+                ; Check MSBs first
+                lda /2
+                cmp /4
+                bcs @eq_gt1
+                ; MSB 1 < MSB 2
+                lda #2
                 jmp @check_done
-@not_equal      lda #0
+@eq_gt1         bne @gt
+                ; MSBs are equal, now compare LSBs
+                lda /1
+                cmp /3
+                bcs @eq_gt2
+                ; MSB 1 = MSB 2, LSB 1 < LSB 2
+                lda #2
+                jmp @check_done
+@eq_gt2         bne @gt
+                ; MSBs and LSBs are equal
+                lda #0
+                jmp @check_done
+@gt             lda #1
 @check_done     nop
 endm
 
@@ -44,32 +55,12 @@ defm            increment_number
 @skip           inc /1
 endm
 
-; Busy wait
-defm            busy_wait
-                ldx #/1
-@main           ldy #0
-@yloop          dey
-                bne @yloop
-                dex
-                bne @main
-endm
-
-; Print a character at a given row and column
-defm            print_char
-                ldx #/1
-                ldy #/2
-                clc       ; clc = update position, sec = get position
-                jsr $fff0 ; "Position cursor" KERNAL function
-                lda #/3
-                jsr CHROUT
-endm
-
 ; Update X display
 defm            update_x_disp
                 ldx #0    ; row
                 ldy #0    ; column
                 clc       ; clc = update position, sec = get position
-                jsr $fff0 ; "Position cursor" KERNAL function
+                jsr POSCURS
                 ldx player_x
                 lda player_x + 1
                 jsr NUMOUT
@@ -80,7 +71,7 @@ defm            update_y_disp
                 ldx #0    ; row
                 ldy #6    ; column
                 clc       ; clc = update position, sec = get position
-                jsr $fff0 ; "Position cursor" KERNAL function
+                jsr POSCURS
                 ldx player_y
                 lda player_y + 1
                 jsr NUMOUT
@@ -89,12 +80,21 @@ endm
 ; Program starts at $1000
 * = $1000
 
+; KERNAL functions
+NUMOUT = $bdcd
+CHROUT = $ffd2
+POSCURS = $fff0
+KERNAL_ISR = $ea31
+
+; Constants
 MAP_X_MAX_LO = 255
 MAP_X_MAX_HI = 3
 MAP_Y_MAX_LO = 255
 MAP_Y_MAX_HI = 3
-NUMOUT = $bdcd
-CHROUT = $ffd2
+VIEWPORT_L = 14
+VIEWPORT_R = 15
+VIEWPORT_U = 10
+VIEWPORT_D = 11
 
 ; Configure screen colors and clear screen, display initial position
                 lda #0
@@ -127,71 +127,134 @@ setup_done      jmp setup_done
 ; Main loop (raster line-based interrupt handler)
 mainloop
                 inc $d019 ; ACK interrupt
-                inc $d020 ; Change border color to show time spent in loop
+                inc int_counter
+                lda int_counter
+                cmp #3
+                beq our_isr
+                jmp KERNAL_ISR
 
-                ; Check for key presses
-                check_key 9,  w_pressed
-                check_key 10, a_pressed
-                check_key 13, s_pressed
-                check_key 18, d_pressed
+our_isr         inc $d020 ; Change border color to show time spent in loop
+                lda #0    ; Reset int_counter
+                sta int_counter
 
                 ; Process key presses
-check_w         lda w_pressed
+check_w         check_key 9
                 cmp #1
                 bne check_s
-                compare_numbers player_y, 0, 0
-                cmp #1
+                compare_numbers player_y, player_y + 1, #0, #0
+                cmp #0
                 beq check_s
                 decrement_number player_y
-                print_char 0, 6, 32
-                print_char 0, 7, 32
-                print_char 0, 8, 32
-                print_char 0, 9, 32
+                jsr reset_y_disp
                 update_y_disp
-                ; busy_wait 250
+                jmp calc_viewport
 
-check_s         lda s_pressed
+check_s         check_key 13
                 cmp #1
                 bne check_a
-                compare_numbers player_y, MAP_Y_MAX_LO, MAP_Y_MAX_HI
-                cmp #1
+                compare_numbers player_y, player_y + 1, #MAP_Y_MAX_LO, #MAP_Y_MAX_HI
+                cmp #0
                 beq check_a
                 increment_number player_y
                 update_y_disp
-                ; busy_wait 250
+                jmp calc_viewport
 
-check_a         lda a_pressed
+check_a         check_key 10
                 cmp #1
                 bne check_d
-                compare_numbers player_x, 0, 0
-                cmp #1
+                compare_numbers player_x, player_x + 1, #0, #0
+                cmp #0
                 beq check_d
                 decrement_number player_x
-                print_char 0, 0, 32
-                print_char 0, 1, 32
-                print_char 0, 2, 32
-                print_char 0, 3, 32
+                jsr reset_x_disp
                 update_x_disp
-                ; busy_wait 250
+                jmp calc_viewport
 
-check_d         lda d_pressed
+check_d         check_key 18
                 cmp #1
-                bne done_checking
-                compare_numbers player_x, MAP_X_MAX_LO, MAP_X_MAX_HI
-                cmp #1
-                beq done_checking
+                bne calc_viewport
+                compare_numbers player_x, player_x + 1, #MAP_X_MAX_LO, #MAP_X_MAX_HI
+                cmp #0
+                beq calc_viewport
                 increment_number player_x
                 update_x_disp
-                ; busy_wait 250
+
+                ; Calculate viewport coordinates
+calc_viewport   compare_numbers player_x, player_x + 1, #VIEWPORT_L, #0
+                cmp #1
+                beq @x_gt
+                cmp #2
+                beq @x_lt
+                ; Equal
+                lda #69
+                ldx #2
+                ldy #0
+                jsr print_char
+                jmp done_calc_vp
+@x_gt           lda #71
+                ldx #2
+                ldy #0
+                jsr print_char
+                jmp done_calc_vp
+@x_lt           lda #76
+                ldx #2
+                ldy #0
+                jsr print_char
+done_calc_vp
 
                 ; Bottom of main loop
-done_checking   dec $d020
-                jmp $ea31 ; Regular interrupt handling
+                dec $d020
+                jmp KERNAL_ISR ; Regular interrupt handling
 
 player_x        BYTE 0, 0
 player_y        BYTE 0, 0
 
-w_pressed       BYTE 0
-a_pressed       BYTE 0
-s_pressed       BYTE 0
-d_pressed       BYTE 0
+viewport_x1     BYTE 0, 0
+viewport_y1     BYTE 0, 0
+viewport_x2     BYTE 0, 0
+viewport_y2     BYTE 0, 0
+
+temp            BYTE 0, 0, 0
+
+int_counter     BYTE 0
+
+; Print a character (X = row, Y = col, A = character)
+print_char      clc ; clc = update position, sec = get position
+                sta temp + 0
+                stx temp + 1
+                sty temp + 2
+                jsr POSCURS
+                lda temp + 0
+                ldx temp + 1
+                ldy temp + 2
+                jsr CHROUT
+                lda temp + 0
+                ldx temp + 1
+                ldy temp + 2
+                rts
+
+; Reset X display
+reset_x_disp    lda #32
+                ldx #0
+                ldy #0
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                rts
+
+; Reset Y display
+reset_y_disp    lda #32
+                ldx #0
+                ldy #6
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                rts
