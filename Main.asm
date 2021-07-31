@@ -100,6 +100,8 @@ VIEWPORT_D = 11
                 lda #0
                 sta $d020
                 sta $d021
+                lda #$01
+                sta $286
                 lda #$93
                 jsr CHROUT
                 update_x_disp
