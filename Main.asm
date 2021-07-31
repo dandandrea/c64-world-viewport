@@ -104,6 +104,8 @@ VIEWPORT_D = 11
                 jsr CHROUT
                 update_x_disp
                 update_y_disp
+                jsr update_x_vp
+                jsr update_y_vp
 
 ; Setup raster line-based interrupt structure
                 lda #$7f
@@ -147,7 +149,8 @@ check_w         check_key 9
                 decrement_number player_y
                 jsr reset_y_disp
                 update_y_disp
-                jmp calc_viewport
+                jsr move_vp_up
+                jmp mainloop_end
 
 check_s         check_key 13
                 cmp #1
@@ -157,7 +160,8 @@ check_s         check_key 13
                 beq check_a
                 increment_number player_y
                 update_y_disp
-                jmp calc_viewport
+                jsr move_vp_down
+                jmp mainloop_end
 
 check_a         check_key 10
                 cmp #1
@@ -168,55 +172,36 @@ check_a         check_key 10
                 decrement_number player_x
                 jsr reset_x_disp
                 update_x_disp
-                jmp calc_viewport
+                jsr move_vp_left
+                jmp mainloop_end
 
 check_d         check_key 18
                 cmp #1
-                bne calc_viewport
+                bne mainloop_end
                 compare_numbers player_x, player_x + 1, #MAP_X_MAX_LO, #MAP_X_MAX_HI
                 cmp #0
-                beq calc_viewport
+                beq mainloop_end
                 increment_number player_x
                 update_x_disp
-
-                ; Calculate viewport coordinates
-calc_viewport   compare_numbers player_x, player_x + 1, #VIEWPORT_L, #0
-                cmp #1
-                beq @x_gt
-                cmp #2
-                beq @x_lt
-                ; Equal
-                lda #69
-                ldx #2
-                ldy #0
-                jsr print_char
-                jmp done_calc_vp
-@x_gt           lda #71
-                ldx #2
-                ldy #0
-                jsr print_char
-                jmp done_calc_vp
-@x_lt           lda #76
-                ldx #2
-                ldy #0
-                jsr print_char
-done_calc_vp
+                jsr move_vp_right
 
                 ; Bottom of main loop
-                dec $d020
+mainloop_end    dec $d020
                 jmp KERNAL_ISR ; Regular interrupt handling
 
-player_x        BYTE 0, 0
-player_y        BYTE 0, 0
+player_x        BYTE 50, 0
+player_y        BYTE 50, 0
 
-viewport_x1     BYTE 0, 0
-viewport_y1     BYTE 0, 0
-viewport_x2     BYTE 0, 0
-viewport_y2     BYTE 0, 0
+viewport_x1     BYTE 50 - VIEWPORT_L, 0
+viewport_y1     BYTE 50 - VIEWPORT_U, 0
+viewport_x2     BYTE 50 + VIEWPORT_R, 0
+viewport_y2     BYTE 50 + VIEWPORT_D, 0
 
 temp            BYTE 0, 0, 0
 
 int_counter     BYTE 0
+
+inclusive       BYTE 0
 
 ; Print a character (X = row, Y = col, A = character)
 print_char      clc ; clc = update position, sec = get position
@@ -257,4 +242,220 @@ reset_y_disp    lda #32
                 jsr print_char
                 iny
                 jsr print_char
+                rts
+
+; Are we in the far left side of the screen?
+check_far_left  compare_numbers player_x, player_x + 1, #VIEWPORT_L, #0
+                cmp #1
+                beq @x_gt
+                cmp #2
+                beq @x_lt
+                ; Equal
+                lda inclusive ; Whether or not in far left side of screen is contextual
+                rts
+@x_gt           lda #0 ; Not in far left side of screen
+                rts
+@x_lt           lda #1 ; In far left side of screen
+                rts
+
+; Are we in the far right side of the screen?
+check_far_right compare_numbers player_x, player_x + 1, #MAP_X_MAX_LO-VIEWPORT_R, #MAP_X_MAX_HI
+                cmp #1
+                beq @x_gt
+                cmp #2
+                beq @x_lt
+                ; Equal
+                lda inclusive ; Whether or not in far right side of screen is contextual
+                rts
+@x_gt           lda #1 ; In far right side of screen
+                rts
+@x_lt           lda #0 ; Not in far right side of screen
+                rts
+
+; Are we in the far top side of the screen?
+check_far_top   compare_numbers player_y, player_y + 1, #VIEWPORT_U, #0
+                cmp #1
+                beq @y_gt
+                cmp #2
+                beq @y_lt
+                ; Equal
+                lda inclusive ; Whether or not in far upper side of screen is contextual
+                rts
+@y_gt           lda #0 ; Not in far upper side of screen
+                rts
+@y_lt           lda #1 ; In far upper side of screen
+                rts
+
+; Are we in the far bottom side of the screen?
+check_far_btm   compare_numbers player_y, player_y + 1, #MAP_Y_MAX_LO-VIEWPORT_D, #MAP_Y_MAX_HI
+                cmp #1
+                beq @y_gt
+                cmp #2
+                beq @y_lt
+                ; Equal
+                lda inclusive ; Whether or not in far bottom side of screen is contextual
+                rts
+@y_gt           lda #1 ; In far bottom side of screen
+                rts
+@y_lt           lda #0 ; Not in far bottom side of screen
+                rts
+
+; Move viewport left
+move_vp_left    lda #0
+                sta inclusive
+                jsr check_far_left
+                bne @nomove
+                lda #1
+                sta inclusive
+                jsr check_far_right
+                bne @nomove
+@move           lda viewport_x1
+                bne @skip1
+                dec viewport_x1 + 1
+@skip1          dec viewport_x1
+                lda viewport_x2
+                bne @skip2
+                dec viewport_x2 + 1
+@skip2          dec viewport_x2
+                jsr update_x_vp
+@nomove         rts
+
+; Move viewport right
+move_vp_right   lda #1
+                sta inclusive
+                jsr check_far_left
+                bne @nomove
+                lda #0
+                sta inclusive
+                jsr check_far_right
+                bne @nomove
+@move           lda viewport_x1
+                cmp #255
+                bne @skip1
+                inc viewport_x1 + 1
+@skip1          inc viewport_x1
+                lda viewport_x2
+                cmp #255
+                bne @skip2
+                inc viewport_x2 + 1
+@skip2          inc viewport_x2
+                jsr update_x_vp
+@nomove         rts
+
+; Move viewport up
+move_vp_up      lda #0
+                sta inclusive
+                jsr check_far_top
+                bne @nomove
+                lda #1
+                sta inclusive
+                jsr check_far_btm
+                bne @nomove
+@move           lda viewport_y1
+                bne @skip1
+                dec viewport_y1 + 1
+@skip1          dec viewport_y1
+                lda viewport_y2
+                bne @skip2
+                dec viewport_y2 + 1
+@skip2          dec viewport_y2
+                jsr update_y_vp
+@nomove         rts
+
+; Move viewport down
+move_vp_down    lda #1
+                sta inclusive
+                jsr check_far_top
+                bne @nomove
+                lda #0
+                sta inclusive
+                jsr check_far_btm
+                bne @nomove
+@move           lda viewport_y1
+                cmp #255
+                bne @skip1
+                inc viewport_y1 + 1
+@skip1          inc viewport_y1
+                lda viewport_y2
+                cmp #255
+                bne @skip2
+                inc viewport_y2 + 1
+@skip2          inc viewport_y2
+                jsr update_y_vp
+@nomove         rts
+
+; Update X viewport display
+update_x_vp     ; Reset display
+                lda #32
+                ldx #2 ; Row
+                ldy #0 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ldx #3 ; Row
+                ldy #0 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ; Update display
+                ldx #2    ; row
+                ldy #0    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                ldx viewport_x1
+                lda viewport_x1 + 1
+                jsr NUMOUT
+                ldx #3    ; row
+                ldy #0    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                ldx viewport_x2
+                lda viewport_x2 + 1
+                jsr NUMOUT
+                rts
+
+; Update Y viewport display
+update_y_vp     ; Reset display
+                lda #32
+                ldx #2 ; Row
+                ldy #6 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ldx #3 ; Row
+                ldy #6 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ; Update display
+                ldx #2    ; row
+                ldy #6    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                ldx viewport_y1
+                lda viewport_y1 + 1
+                jsr NUMOUT
+                ldx #3    ; row
+                ldy #6    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                ldx viewport_y2
+                lda viewport_y2 + 1
+                jsr NUMOUT
                 rts
