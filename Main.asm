@@ -131,13 +131,14 @@ setup_done      jmp setup_done
 ; Main loop (raster line-based interrupt handler)
 mainloop
                 inc $d019 ; ACK interrupt
-                inc int_counter
                 lda int_counter
-                cmp #3
+                cmp #14
                 beq our_isr
+                inc int_counter
                 jmp KERNAL_ISR
 
-our_isr         inc $d020 ; Change border color to show time spent in loop
+our_isr         inc int_counter
+                inc $d020 ; Change border color to show time spent in loop
                 lda #0    ; Reset int_counter
                 sta int_counter
 
