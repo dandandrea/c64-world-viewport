@@ -213,6 +213,7 @@ check_w         check_key 9
                 jsr reset_y_disp
                 update_y_disp
                 jsr move_vp_up
+                jsr redraw_viewport
                 jmp mainloop_end
 
 check_s         check_key 13
@@ -224,6 +225,7 @@ check_s         check_key 13
                 increment_number player_y
                 update_y_disp
                 jsr move_vp_down
+                jsr redraw_viewport
                 jmp mainloop_end
 
 check_a         check_key 10
@@ -236,6 +238,7 @@ check_a         check_key 10
                 jsr reset_x_disp
                 update_x_disp
                 jsr move_vp_left
+                jsr redraw_viewport
                 jmp mainloop_end
 
 check_d         check_key 18
@@ -247,6 +250,7 @@ check_d         check_key 18
                 increment_number player_x
                 update_x_disp
                 jsr move_vp_right
+                jsr redraw_viewport
 
                 ; Bottom of main loop
 mainloop_end    ; dec $d020
@@ -265,7 +269,8 @@ viewport_y2     BYTE 50 + VIEWPORT_D, 0
 ; First viewport byte = col + row size
 ; Row size = 100
 ; 36 + (40 * 100) = 4036 = $fc4 = 15 * 16^2 + 12 * 16^1 + 4 * 16^0 = 3840 + 192 + 4 = 4036
-vp_map_start    BYTE $c4, $0f
+vp_map_offset   BYTE $c4, $0f
+vp_map_start    BYTE 0, 0
 
 temp            BYTE 0, 0, 0, 0, 0, 0
 
@@ -274,7 +279,7 @@ int_counter     BYTE 0
 inclusive       BYTE 0
 
 ; Map data
-map
+map_data
                 BYTE 'X', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'
                 BYTE 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'
                 BYTE 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'
@@ -645,23 +650,23 @@ update_y_vp     ; Reset display
 
 ; Update viewport first byte for move up: Subtract size of in-memory map (Y-axis)
 vp_byte_up      sec
-                lda vp_map_start
+                lda vp_map_offset
                 sbc #MEM_MAP_Y_MAX
-                sta vp_map_start
-                lda vp_map_start + 1
+                sta vp_map_offset
+                lda vp_map_offset + 1
                 sbc #0
-                sta vp_map_start + 1
+                sta vp_map_offset + 1
 @done           rts
 
 ; Update viewport first byte for move down: Add size of in-memory map (Y-axis)
 vp_byte_down    clc
                 lda #MEM_MAP_Y_MAX
-                adc vp_map_start
-                sta vp_map_start
+                adc vp_map_offset
+                sta vp_map_offset
                 bcc @done
                 lda #0
-                adc vp_map_start + 1
-                sta vp_map_start + 1
+                adc vp_map_offset + 1
+                sta vp_map_offset + 1
 @done           rts
 
 ; Increment a 16 bit number
@@ -674,18 +679,18 @@ defm            increment_number
 endm
 
 ; Update viewport first byte for move left: Subtract one
-vp_byte_left    lda vp_map_start
+vp_byte_left    lda vp_map_offset
                 bne @skip
-                dec vp_map_start + 1
-@skip           dec vp_map_start
+                dec vp_map_offset + 1
+@skip           dec vp_map_offset
                 rts
 
 ; Update viewport first byte for move right: Add one
-vp_byte_right   lda vp_map_start
+vp_byte_right   lda vp_map_offset
                 cmp #255
                 bne @skip
-                inc vp_map_start + 1
-@skip           inc vp_map_start
+                inc vp_map_offset + 1
+@skip           inc vp_map_offset
                 rts
 
 ; Update viewport first byte display
@@ -706,9 +711,67 @@ upd_vp_byte_dis ; Reset display
                 ldy #0    ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
+                ldx vp_map_offset
+                lda vp_map_offset + 1
+                jsr NUMOUT
+                rts
+
+; Redraw viewport based on current viewport first byte
+redraw_viewport
+                ; First, store start address of map_data in vp_map_start
+                lda #<map_data
+                sta vp_map_start
+                lda #>map_data
+                sta vp_map_start + 1
+
+                ; TODO: REMOVE ME
+                ; Display start address of map_data
+                ldx #7    ; row
+                ldy #0    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                ldx #<map_data
+                lda #>map_data
+                jsr NUMOUT
+
+                ; Add vp_map_offset to vp_map_start
+                clc
+                lda vp_map_offset
+                adc vp_map_start
+                sta vp_map_start
+                lda vp_map_offset + 1
+                adc vp_map_start + 1
+                sta vp_map_start +1
+
+                ; TODO: REMOVE ME
+                ; Display start address of vp_map_start
+                ldx #9    ; row
+                ldy #1    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
+                lda #32
+                ldx #9 ; Row
+                ldy #1 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ldx #9    ; row
+                ldy #0    ; column
+                clc       ; clc = update position, sec = get position
+                jsr POSCURS
                 ldx vp_map_start
                 lda vp_map_start + 1
                 jsr NUMOUT
+
+                ; vp_map_start is set, we can start copying map_data bytes into screen memory now
+                ; TODO: USE DOUBLE-BUFFERING
+
                 rts
 
 ; Switch double-buffering bank
