@@ -95,6 +95,8 @@ VIEWPORT_L = 14
 VIEWPORT_R = 15
 VIEWPORT_U = 10
 VIEWPORT_D = 11
+VIEWPORT_X = VIEWPORT_L+VIEWPORT_R+1
+VIEWPORT_Y = VIEWPORT_U+VIEWPORT_D+1
 
 ; Configure screen colors and clear screen, display initial values
                 lda #0
@@ -718,7 +720,7 @@ upd_vp_byte_dis ; Reset display
 
 ; Redraw viewport based on current viewport first byte
 redraw_viewport
-                ; First, store start address of map_data in vp_map_start
+                ; First, reset start address of map_data in vp_map_start
                 lda #<map_data
                 sta vp_map_start
                 lda #>map_data
@@ -734,14 +736,17 @@ redraw_viewport
                 lda #>map_data
                 jsr NUMOUT
 
-                ; Add vp_map_offset to vp_map_start
+                ; Next, add vp_map_offset to vp_map_start
+                ; Also store pointer to vp_map_start in $fb/$fc for use in indirect addressing
                 clc
                 lda vp_map_offset
                 adc vp_map_start
                 sta vp_map_start
+                sta $fb
                 lda vp_map_offset + 1
                 adc vp_map_start + 1
                 sta vp_map_start +1
+                sta $fc
 
                 ; TODO: REMOVE ME
                 ; Display start address of vp_map_start
@@ -772,7 +777,70 @@ redraw_viewport
                 ; vp_map_start is set, we can start copying map_data bytes into screen memory now
                 ; TODO: USE DOUBLE-BUFFERING
 
-                rts
+                ; Viewport dimensions:
+                ; VIEWPORT_L = 14
+                ; VIEWPORT_R = 15
+                ; VIEWPORT_U = 10
+                ; VIEWPORT_D = 11
+                ; Viewport width = 30
+                ; Viewport height = 22
+                ; Start at $0400 (or $0800)
+                ; Render 30 bytes
+                ; Next line
+                ; Repeat 22 times
+                ; This leaves 3 blank rows at bottom and 10 blank columns at right
+
+                ; Render 6 rows at a time, 2 rows for final section
+
+                ; Initial screen pointer to $0400
+                lda #$00
+                sta $fd
+                lda #$04
+                sta $fe
+
+                ; Initial map_data pointer already set
+
+                ; For 22 rows
+                ;   jsr redraw_vp_row
+                ;   Add 100 to map_data pointer
+                ;   Add 40 to screen pointer
+
+                ldx #0
+@loop           jsr redraw_vp_row
+                cpx #VIEWPORT_Y-1
+                beq @done
+                inx
+
+                ; Add 40 to screen pointer (advance to start of next row)
+                lda #40
+                clc
+                adc $fd
+                sta $fd
+                lda #0
+                adc $fe
+                sta $fe
+
+                ; Add MEM_MAP_X_MAX to map_data pointer
+                lda #MEM_MAP_X_MAX
+                clc
+                adc $fb
+                sta $fb
+                lda #0
+                adc $fc
+                sta $fc
+
+                jmp @loop
+@done           rts
+
+; Redraw viewport row based on current map_data and screen pointers
+redraw_vp_row   ldy #0
+@loop           lda ($fb),Y
+                sta ($fd),Y
+                cpy #VIEWPORT_X-1
+                beq @done
+                iny
+                jmp @loop
+@done           rts
 
 ; Switch double-buffering bank
 sw_dbuff_bank   lda $d018
