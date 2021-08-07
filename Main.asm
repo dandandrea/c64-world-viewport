@@ -58,7 +58,7 @@ endm
 ; Update X display
 defm            update_x_disp
                 ldx #0    ; row
-                ldy #0    ; column
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx player_x
@@ -68,8 +68,8 @@ endm
 
 ; Update Y display
 defm            update_y_disp
-                ldx #0    ; row
-                ldy #6    ; column
+                ldx #1    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx player_y
@@ -107,11 +107,14 @@ VIEWPORT_Y = VIEWPORT_U+VIEWPORT_D+1
                 sta $286
                 lda #$93
                 jsr CHROUT
+                jsr reset_x_disp
+                jsr reset_y_disp
                 update_x_disp
                 update_y_disp
                 jsr update_x_vp
                 jsr update_y_vp
                 jsr upd_vp_byte_dis
+                jsr redraw_viewport
 
 ; Draw ruler along bottom of viewport
 ; TODO: REMOVE ME
@@ -416,8 +419,8 @@ print_char      clc ; clc = update position, sec = get position
 
 ; Reset X display
 reset_x_disp    lda #32
-                ldx #0
-                ldy #0
+                ldx #0  ; Col
+                ldy #31 ; Row
                 jsr print_char
                 iny
                 jsr print_char
@@ -429,8 +432,8 @@ reset_x_disp    lda #32
 
 ; Reset Y display
 reset_y_disp    lda #32
-                ldx #0
-                ldy #6
+                ldx #1  ; Col
+                ldy #31 ; Row
                 jsr print_char
                 iny
                 jsr print_char
@@ -591,8 +594,8 @@ move_vp_down    lda #1
 ; Update X viewport display
 update_x_vp     ; Reset display
                 lda #32
-                ldx #2 ; Row
-                ldy #0 ; Col
+                ldx #3  ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -600,8 +603,8 @@ update_x_vp     ; Reset display
                 jsr print_char
                 iny
                 jsr print_char
-                ldx #3 ; Row
-                ldy #0 ; Col
+                ldx #5  ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -610,15 +613,15 @@ update_x_vp     ; Reset display
                 iny
                 jsr print_char
                 ; Update display
-                ldx #2    ; row
-                ldy #0    ; column
+                ldx #3    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx viewport_x1
                 lda viewport_x1 + 1
                 jsr NUMOUT
-                ldx #3    ; row
-                ldy #0    ; column
+                ldx #5    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx viewport_x2
@@ -629,8 +632,8 @@ update_x_vp     ; Reset display
 ; Update Y viewport display
 update_y_vp     ; Reset display
                 lda #32
-                ldx #2 ; Row
-                ldy #6 ; Col
+                ldx #4  ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -638,8 +641,8 @@ update_y_vp     ; Reset display
                 jsr print_char
                 iny
                 jsr print_char
-                ldx #3 ; Row
-                ldy #6 ; Col
+                ldx #6  ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -648,15 +651,15 @@ update_y_vp     ; Reset display
                 iny
                 jsr print_char
                 ; Update display
-                ldx #2    ; row
-                ldy #6    ; column
+                ldx #4    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx viewport_y1
                 lda viewport_y1 + 1
                 jsr NUMOUT
-                ldx #3    ; row
-                ldy #6    ; column
+                ldx #6    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx viewport_y2
@@ -702,8 +705,8 @@ vp_byte_right   lda vp_map_offset
 ; Update viewport first byte display
 upd_vp_byte_dis ; Reset display
                 lda #32
-                ldx #5 ; Row
-                ldy #1 ; Col
+                ldx #9  ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -713,8 +716,8 @@ upd_vp_byte_dis ; Reset display
                 jsr print_char
                 iny
                 jsr print_char
-                ldx #5    ; row
-                ldy #0    ; column
+                ldx #9    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx vp_map_offset
@@ -732,8 +735,20 @@ redraw_viewport
 
                 ; TODO: REMOVE ME
                 ; Display start address of map_data
-                ldx #7    ; row
-                ldy #0    ; column
+                lda #32
+                ldx #8  ; Row
+                ldy #31 ; Col
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                iny
+                jsr print_char
+                ldx #8    ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx #<map_data
@@ -754,13 +769,9 @@ redraw_viewport
 
                 ; TODO: REMOVE ME
                 ; Display start address of vp_map_start
-                ldx #9    ; row
-                ldy #1    ; column
-                clc       ; clc = update position, sec = get position
-                jsr POSCURS
                 lda #32
-                ldx #9 ; Row
-                ldy #1 ; Col
+                ldx #10 ; Row
+                ldy #31 ; Col
                 jsr print_char
                 iny
                 jsr print_char
@@ -770,8 +781,8 @@ redraw_viewport
                 jsr print_char
                 iny
                 jsr print_char
-                ldx #9    ; row
-                ldy #0    ; column
+                ldx #10   ; row
+                ldy #30   ; column
                 clc       ; clc = update position, sec = get position
                 jsr POSCURS
                 ldx vp_map_start
